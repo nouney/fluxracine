@@ -2,6 +2,7 @@ package chat
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,6 +28,7 @@ type Server struct {
 	db db.DB
 	// address of form "ip:port" of the internal http server
 	httpAddr string
+	httpSrv  http.Server
 	sessions map[string]*Session
 	mutex    *sync.Mutex
 	// Fake session of user "SYSTEM"
@@ -130,7 +132,7 @@ type MessagePayload struct {
 // Send sends a message from a user to another one.
 // If the receiver is not connected on this server, the message will be forwarded
 // to the appropriate server.
-func (s Server) Send(m *MessagePayload) error {
+func (s *Server) Send(m *MessagePayload) error {
 	err := s.sendToUser(m)
 	if err == nil {
 		return nil
@@ -151,7 +153,7 @@ func (s Server) Send(m *MessagePayload) error {
 
 // Receive waits until a message is received by user nickname.
 // Thread safe.
-func (s Server) Receive(nickname string) (*MessagePayload, error) {
+func (s *Server) Receive(nickname string) (*MessagePayload, error) {
 	s.mutex.Lock()
 	sess, ok := s.sessions[nickname]
 	s.mutex.Unlock()
@@ -167,14 +169,24 @@ func (s Server) Receive(nickname string) (*MessagePayload, error) {
 
 // Run runs the server.
 // At this time, it just runs the internal HTTP server in background.
-func (s Server) Run() {
-	http.HandleFunc("/send", s.sendHandler)
-	log.Infof("start internal http server on address \"%s\"", s.httpAddr)
-	go http.ListenAndServe(s.httpAddr, nil)
+func (s *Server) Run() {
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/send", s.sendHandler)
+
+		s.httpSrv.Addr = s.httpAddr
+		s.httpSrv.Handler = mux
+
+		log.Infof("start cluster http server on address \"%s\"", s.httpAddr)
+		err := s.httpSrv.ListenAndServe()
+		if err != nil {
+			log.Error(errors.Wrap(err, "http"))
+		}
+	}()
 }
 
 // NbSessions returns the number of session on the server.
-func (s Server) NbSessions() int {
+func (s *Server) NbSessions() int {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -186,11 +198,12 @@ func (s Server) NbSessions() int {
 // The object can be reused later.
 func (s *Server) GracefulShutdown() {
 	s.CloseAllSessions()
+	s.httpSrv.Shutdown(context.Background())
 }
 
 // sendToUser send a message to a user connected on this server, using its channel.
 // Returns ErrUserNotFound if the user is not connected on this server.
-func (s Server) sendToUser(m *MessagePayload) error {
+func (s *Server) sendToUser(m *MessagePayload) error {
 	s.mutex.Lock()
 	sess := s.sessions[m.To]
 	s.mutex.Unlock()
@@ -205,7 +218,7 @@ func (s Server) sendToUser(m *MessagePayload) error {
 
 // sendHandler is the HTTP handler used when another server needs this server to send a message
 // to a user (forwarding).
-func (s Server) sendHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) sendHandler(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Error(errors.Wrap(err, "read all"))
@@ -231,7 +244,7 @@ func (s Server) sendHandler(w http.ResponseWriter, r *http.Request) {
 // forwardMessage forwards a message to the appropriate server so it can be sent to the user.
 // Returns ErrUserNotFound if no server is associated to the receiver or if the user doesn't
 // exist on the server.
-func (s Server) forwardMessage(m *MessagePayload) error {
+func (s *Server) forwardMessage(m *MessagePayload) error {
 	// retrieve the server on which the receiver is connected
 	server, err := s.db.GetServer(m.To)
 	if err != nil {

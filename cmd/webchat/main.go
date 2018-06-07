@@ -24,23 +24,23 @@ var (
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	opts := []chat.Opt{}
-
 	port = os.Getenv("HTTP_LISTEN_PORT")
 	if port == "" {
 		port = "8000"
 	}
 
-	podIP := os.Getenv("POD_IP")
-	if podIP != "" {
-		opts = append(opts, chat.WithHTTPAddress(podIP+":8000"))
+	opts := []chat.Opt{}
+	clusterHTTPListenPort := os.Getenv("CLUSTER_HTTP_LISTEN_PORT")
+	if clusterHTTPListenPort == "" {
+		clusterHTTPListenPort = "3000"
 	}
+	podIP := os.Getenv("POD_IP")
+	opts = append(opts, chat.WithHTTPAddress(podIP+":"+clusterHTTPListenPort))
 
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
 		panic("REDIS_ADDR is missing")
 	}
-
 	db, err := redis.New(redisAddr, "")
 	if err != nil {
 		panic(err)
