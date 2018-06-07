@@ -3,13 +3,13 @@ package main
 import (
 	"encoding/json"
 	"html/template"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/websocket"
 	"github.com/nouney/fluxracine/pkg/chat"
 	"github.com/nouney/fluxracine/pkg/event"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 type messagePayload struct {
@@ -17,6 +17,7 @@ type messagePayload struct {
 	Message string `json:"message"`
 }
 
+// handleEventUserSendMessage handles the sending of a message to a user
 func handleEventUserSendMessage(sess *chat.Session) event.Handler {
 	return func(data interface{}) error {
 		payload := &messagePayload{}
@@ -44,9 +45,10 @@ type receiveMessageData struct {
 	Message string `json:"message"`
 }
 
+// handleEventUserReceiveMessage handles the reception of a message for a user
 func handleEventUserReceiveMessage(sess *chat.Session, c *websocket.Conn) event.Handler {
 	return func(data interface{}) error {
-		log.Printf("user \"%s\" receive a message: %+v", sess.Nickname, data)
+		log.Infof("user \"%s\" receive a message: %+v", sess.Nickname, data)
 		msg := data.(*chat.MessagePayload)
 		return c.WriteJSON(&action{
 			Action: actionReceiveMessage,
@@ -58,9 +60,10 @@ func handleEventUserReceiveMessage(sess *chat.Session, c *websocket.Conn) event.
 	}
 }
 
+// handleEventUserLogout handles user disconnection.
 func handleEventUserLogout(sess *chat.Session) event.Handler {
 	return func(data interface{}) error {
-		log.Printf("user \"%s\" disconnected", sess.Nickname)
+		log.Infof("user \"%s\" logged out", sess.Nickname)
 		return sess.Close()
 	}
 }
@@ -69,20 +72,20 @@ func handleEventUserLogout(sess *chat.Session) event.Handler {
 func handleChatSession(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println("upgrader:", err)
+		log.Error(errors.Wrap(err, "upgrader"))
 		return
 	}
 	defer c.Close()
 
 	sess, err := server.NewSession()
 	if err != nil {
-		log.Println("new session:", err)
+		log.Error(errors.Wrap(err, "new session"))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("user \"%s\" logged in", sess.Nickname)
-	log.Printf("nb sessions: %d", server.NbSessions())
+	log.Infof("user \"%s\" logged in", sess.Nickname)
+	log.Debugf("nb sessions: %d", server.NbSessions())
 
 	// Use the websocket and the chat server as event sources
 	d := event.NewDispatcher(&websocketEventSource{c}, &chatSessionEventSource{sess})
@@ -92,12 +95,13 @@ func handleChatSession(w http.ResponseWriter, r *http.Request) {
 
 	err = d.Listen()
 	if err != nil {
-		log.Println("dispatcher:", err)
+		log.Error(errors.Wrap(err, "dispatcher"))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 }
 
+// handleHome returns the HTML homepage.
 func handleHome(w http.ResponseWriter, r *http.Request) {
 	homeHTML.Execute(w, "ws://"+r.Host+"/chat")
 }

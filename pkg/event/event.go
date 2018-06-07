@@ -3,8 +3,10 @@ package event
 
 import (
 	"io"
-	"log"
 	"sync"
+
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 // Type is a type to distinguish events
@@ -69,7 +71,7 @@ func (d *Dispatcher) Listen() error {
 		go func(src Source) {
 			err := d.listenSource(src, out)
 			if err != io.EOF {
-				log.Println("listen source:", err)
+				log.Error(errors.Wrap(err, "listen source:"))
 			}
 			wg.Done()
 		}(src)

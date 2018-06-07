@@ -3,14 +3,13 @@ package main
 import (
 	"fmt"
 	"io"
-	"log"
-	"os"
 
 	"github.com/buger/jsonparser"
 	"github.com/gorilla/websocket"
 	"github.com/nouney/fluxracine/pkg/chat"
 	"github.com/nouney/fluxracine/pkg/event"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -25,14 +24,13 @@ type websocketEventSource struct {
 // beware: websocket.Conn supports max 1 reading goroutine and 1 writing goroutine.
 // the reading one is below and used by the event dispatcher.
 func (ws websocketEventSource) Next() (*event.Event, error) {
-	l := log.New(os.Stdout, "websocket-event-source", 0)
 	ev := event.Event{}
 	_, msg, err := ws.conn.ReadMessage()
 	if err != nil {
 		ev.Type = event.EventUserLogout
 		return &ev, io.EOF
 	}
-	l.Printf("receive from websocket: %s", string(msg))
+	log.Debugf("receive from websocket: %s", string(msg))
 
 	action, err := jsonparser.GetString(msg, "action")
 	if err != nil {

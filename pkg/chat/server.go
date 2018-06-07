@@ -6,14 +6,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"sync"
 
 	"github.com/dustinkirkland/golang-petname"
-
 	"github.com/nouney/fluxracine/internal/db"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -22,6 +21,7 @@ var (
 )
 
 // Server is a server that provides a one-to-one chat system.
+// It is "network-agnostic": it does not know about network protocol and message format.
 type Server struct {
 	// db used by the server
 	db db.DB
@@ -153,6 +153,7 @@ func (s Server) Receive(nickname string) (*MessagePayload, error) {
 // At this time, it just runs the internal HTTP server in background.
 func (s Server) Run() {
 	http.HandleFunc("/send", s.sendHandler)
+	log.Infof("start internal http server on address \"%s\"", s.httpAddr)
 	go http.ListenAndServe(s.httpAddr, nil)
 }
 
@@ -171,7 +172,7 @@ func (s Server) sendToUser(m *MessagePayload) error {
 	sess := s.sessions[m.To]
 	s.mutex.Unlock()
 	if sess == nil {
-		log.Printf("user \"%s\" is not connected on this server", m.To)
+		log.Debugf("user \"%s\" is not connected on this server", m.To)
 		return ErrUserNotFound
 	}
 
@@ -184,7 +185,7 @@ func (s Server) sendToUser(m *MessagePayload) error {
 func (s Server) sendHandler(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Println("read all:", err)
+		log.Error(errors.Wrap(err, "read all"))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -192,12 +193,12 @@ func (s Server) sendHandler(w http.ResponseWriter, r *http.Request) {
 	m := MessagePayload{}
 	err = json.Unmarshal(body, &m)
 	if err != nil {
-		log.Println("unmarshal json:", err)
+		log.Error(errors.Wrap(err, "unmarshal json:"))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("message to forward: %+v", &m)
+	log.Infof("message to forward: %+v", &m)
 	err = s.sendToUser(&m)
 	if err == ErrUserNotFound {
 		w.WriteHeader(http.StatusNotFound)
@@ -218,7 +219,7 @@ func (s Server) forwardMessage(m *MessagePayload) error {
 		return err
 	}
 
-	log.Printf("forward message %+v to \"%s\"", m, server)
+	log.Debugf("forward message to \"%s\"", server)
 
 	b, err := json.Marshal(m)
 	if err != nil {
