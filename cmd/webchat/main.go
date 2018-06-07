@@ -4,10 +4,13 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/nouney/fluxracine/internal/db/redis"
 	"github.com/nouney/fluxracine/pkg/chat"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/gorilla/websocket"
 )
@@ -48,11 +51,21 @@ func init() {
 		panic(err)
 	}
 
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc,
+		syscall.SIGTERM,
+	)
+	go func() {
+		<-sigc
+		server.GracefulShutdown()
+	}()
 	server.Run()
 }
 
 func main() {
 	http.HandleFunc("/", handleHome)
 	http.HandleFunc("/chat", handleChatSession)
+
+	log.Infof("listening on :%s", port)
 	http.ListenAndServe(":"+port, nil)
 }

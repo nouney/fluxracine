@@ -91,17 +91,33 @@ func (s *Server) CloseSession(nickname string) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	err := s.db.UnassignServer(nickname)
-	if err != nil {
-		return errors.Wrap(err, "db")
-	}
-
 	sess := s.sessions[nickname]
 	if sess != nil {
 		close(sess.recv)
 	}
 	delete(s.sessions, nickname)
+
+	err := s.db.UnassignServer(nickname)
+	if err != nil {
+		return errors.Wrap(err, "db")
+	}
+	log.Infof("session of user \"%s\" closed", nickname)
 	return nil
+}
+
+// CloseAllSessions closes all sessions on this server.
+func (s *Server) CloseAllSessions() {
+	s.mutex.Lock()
+	defer s.mutex.Lock()
+
+	for nickname, sess := range s.sessions {
+		s.db.UnassignServer(nickname)
+
+		if sess != nil {
+			close(sess.recv)
+		}
+		delete(s.sessions, nickname)
+	}
 }
 
 // MessagePayload represents a message
@@ -163,6 +179,13 @@ func (s Server) NbSessions() int {
 	defer s.mutex.Unlock()
 
 	return len(s.sessions)
+}
+
+// GracefulShutdown gracefuly shutdowns the current server.
+// It will remove all users from redis and clear its sessions.
+// The object can be reused later.
+func (s *Server) GracefulShutdown() {
+	s.CloseAllSessions()
 }
 
 // sendToUser send a message to a user connected on this server, using its channel.
