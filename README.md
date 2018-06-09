@@ -16,7 +16,7 @@ webchat is a simple one-to-one chat server on browsers.
 In the root directory:
 
 ```shell
-$ docker build -f build/Dockerfile -t fluxracine/webchat:latest
+$ docker build -f build/Dockerfile -t fluxracine/webchat:latest .
 ```
 
 This will compile the Go code and create a lightweight Docker image.
