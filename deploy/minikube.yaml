@@ -1,0 +1,5 @@
+image:
+    pullPolicy: Never
+service:
+    type: NodePort
+    port: 8000
