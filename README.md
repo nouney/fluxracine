@@ -2,6 +2,13 @@
 
 webchat is a simple one-to-one chat server on browsers.
 
+# Requirements
+
+- a Kubernetes cluster
+- helm
+- docker
+- [a browser with websockets](https://caniuse.com/#feat=websockets)
+
 # Build
 
 ## Docker image
@@ -38,4 +45,4 @@ $ echo http://`minikube ip`:$NODE_PORT
 ```
 
 # How it works
-![doc/arch.png](https://raw.githubusercontent.com/nouney/fluxracine/master/doc/arch.png)
+![doc/arch.png](doc/arch.png)
